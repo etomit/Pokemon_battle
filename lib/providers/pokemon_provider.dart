@@ -1,16 +1,16 @@
+import 'dart:convert';
 import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'dart:convert';
+import '../services/database_helper.dart';
 
 class PokemonProvider with ChangeNotifier {
   List<Map<String, dynamic>> _pokemonList = [];
   Map<String, dynamic>? _pokemonDetails;
-
   List<Map<String, dynamic>> _randomTeam = [];
   List<Map<String, dynamic>> _userTeam = [];
   List<Map<String, dynamic>> _battleHistory = [];
+  int? _currentUserId;
 
   // Getters
   List<Map<String, dynamic>> get pokemonList => _pokemonList;
@@ -18,6 +18,7 @@ class PokemonProvider with ChangeNotifier {
   List<Map<String, dynamic>> get randomTeam => _randomTeam;
   List<Map<String, dynamic>> get userTeam => _userTeam;
   List<Map<String, dynamic>> get battleHistory => _battleHistory;
+  int? get currentUserId => _currentUserId;
 
   // Fetch Pokémon list
   Future<void> fetchPokemonList() async {
@@ -51,6 +52,7 @@ class PokemonProvider with ChangeNotifier {
     }
   }
 
+  // Générer une équipe aléatoire
   void generateRandomTeam(List<Map<String, dynamic>> allPokemons) {
     _randomTeam.clear();
     final random = Random();
@@ -79,17 +81,75 @@ class PokemonProvider with ChangeNotifier {
     _userTeam.clear();
     notifyListeners();
   }
-  void addBattleToHistory(String result, List<Map<String, dynamic>> userTeam, List<Map<String, dynamic>> opponentTeam) {
+
+  Future<void> saveBattleHistory(String result) async {
+    final db = DatabaseHelper.instance;
+    if (_currentUserId == null) return;
+
+    final user = await db.getUserById(_currentUserId!);
+    if (user == null) return;
+
+    String username = user['username'];
+    final userTeamJson = json.encode(_userTeam);
+    final opponentTeamJson = json.encode(_randomTeam);
+    await db.insertBattle(username, result, userTeamJson, opponentTeamJson);
+
     _battleHistory.add({
+      'username': username,
       'result': result,
-      'userTeam': List.from(userTeam),
-      'opponentTeam': List.from(opponentTeam),
+      'userTeam': _userTeam,
+      'opponentTeam': _randomTeam,
       'date': DateTime.now().toIso8601String(),
     });
+
     notifyListeners();
   }
 
-  void clearBattleHistory() {
+  // Charger l'historique des batailles depuis la base de données
+  Future<void> loadBattleHistory() async {
+    final db = DatabaseHelper.instance;
+    final history = await db.getBattleHistory();
+    _battleHistory = history.map((e) {
+      return {
+        'username': e['username'],
+        'result': e['result'],
+        'userTeam': json.decode(e['user_team']),
+        'opponentTeam': json.decode(e['opponent_team']),
+        'date': e['date'],
+      };
+    }).toList();
+    notifyListeners();
+  }
+
+
+  // Inscription utilisateur
+  Future<bool> registerUser(String username, String password) async {
+    final db = DatabaseHelper.instance;
+    try {
+      await db.insertAccount(username, password);
+      return true;
+    } catch (e) {
+      print("Erreur lors de l'inscription: $e");
+      return false;
+    }
+  }
+
+  // Connexion utilisateur
+  Future<bool> loginUser(String username, String password) async {
+    final db = DatabaseHelper.instance;
+    final user = await db.getUser(username);
+    if (user != null) {
+      _currentUserId = user['id'];
+      await loadBattleHistory();
+      notifyListeners();
+      return true;
+    }
+    return false;
+  }
+
+  // Déconnexion utilisateur
+  void logoutUser() {
+    _currentUserId = null;
     _battleHistory.clear();
     notifyListeners();
   }

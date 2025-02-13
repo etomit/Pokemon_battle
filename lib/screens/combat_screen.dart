@@ -86,7 +86,7 @@ class _BattleScreenState extends State<BattleScreen> {
           battleLog = "${attacker['name']['fr']} attaque ${defender['name']['fr']} et inflige $damage dégâts !";
         }
 
-        if (defender['hp'] <= 0) {
+        if (defender['hp'] < 1) {
           battleLog += " ${defender['name']['fr']} est K.O !";
           if (currentEnemyIndex < enemyTeam.length - 1) {
             currentEnemyIndex++;
@@ -111,7 +111,7 @@ class _BattleScreenState extends State<BattleScreen> {
           battleLog += "\n${enemyAttacker['name']['fr']} riposte et inflige $enemyDamage dégâts à ${enemyDefender['name']['fr']} !";
         }
 
-        if (enemyDefender['hp'] <= 0) {
+        if (enemyDefender['hp'] < 1) {
           battleLog += " ${enemyDefender['name']['fr']} est K.O !";
           if (currentPlayerIndex < playerTeam.length - 1) {
             currentPlayerIndex++;
@@ -162,9 +162,9 @@ class _BattleScreenState extends State<BattleScreen> {
       duration: Duration(seconds: 1),
       builder: (context, value, child) {
         Color barColor;
-        if (value > 0.5) {
+        if (value > 0.6) {
           barColor = Colors.green;
-        } else if (value > 0.2) {
+        } else if (value > 0.3) {
           barColor = Colors.yellow;
         } else {
           barColor = Colors.red;
@@ -190,12 +190,12 @@ class _BattleScreenState extends State<BattleScreen> {
 
   void _saveBattleResult() {
     final provider = Provider.of<PokemonProvider>(context, listen: false);
-    provider.addBattleToHistory(
+    provider.saveBattleHistory(
       battleLog.contains("Victoire") ? "Victoire" : "Défaite",
-      playerTeam,
-      enemyTeam,
     );
   }
+
+
 
   @override
   Widget build(BuildContext context) {

@@ -1,27 +1,47 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/pokemon_provider.dart';
+import '../services/database_helper.dart';
+import 'dart:convert';
 
-class CombatHistoryScreen extends StatelessWidget {
+class CombatHistoryScreen extends StatefulWidget {
+  @override
+  _CombatHistoryScreenState createState() => _CombatHistoryScreenState();
+}
+
+class _CombatHistoryScreenState extends State<CombatHistoryScreen> {
+  List<Map<String, dynamic>> battleHistory = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBattleHistory();
+  }
+
+  Future<void> _loadBattleHistory() async {
+    final db = DatabaseHelper.instance;
+    final history = await db.getBattleHistory();
+    setState(() {
+      battleHistory = history;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final provider = Provider.of<PokemonProvider>(context);
-    final battleHistory = provider.battleHistory;
-
     return Scaffold(
       appBar: AppBar(
-        title: Text("Historique des combats",style: TextStyle(color: Colors.white)),
+        title: Text("Historique des combats", style: TextStyle(color: Colors.white)),
         backgroundColor: Colors.grey[850],
         iconTheme: IconThemeData(color: Colors.white),
       ),
       backgroundColor: Colors.grey[800],
       body: battleHistory.isEmpty
           ? Center(
-            child: Text(
-              "Aucun combat enregistré.",
-              style: TextStyle(fontSize: 18, color: Colors.white),
-            ),
-          )
+        child: Text(
+          "Aucun combat enregistré.",
+          style: TextStyle(fontSize: 18, color: Colors.white),
+        ),
+      )
           : Center(
         child: Container(
           width: MediaQuery.of(context).size.width * 0.9,
@@ -43,7 +63,7 @@ class CombatHistoryScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Text(
-                        "Combat ${index + 1}: ${combat['result']}",
+                        "Combat de ${combat['username']}: ${combat['result']}",
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
@@ -86,7 +106,8 @@ class CombatHistoryScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildPokemonTeam(List<dynamic> team) {
+  Widget _buildPokemonTeam(String teamJson) {
+    List<dynamic> team = teamJson.isNotEmpty ? List<Map<String, dynamic>>.from(json.decode(teamJson)) : [];
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(

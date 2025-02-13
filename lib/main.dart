@@ -1,34 +1,60 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/pokemon_provider.dart';
+import 'providers/auth_providers.dart';
 import 'screens/pokedex_screen.dart';
 import 'screens/team_builder_screen.dart';
 import 'screens/random_team_screen.dart';
 import 'screens/combat_screen.dart';
 import 'screens/combat_history_screen.dart';
+import 'services/database_helper.dart';
+import 'screens/login_screen.dart';
+import 'screens/signup_screen.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  print("loading database");
+  await DatabaseHelper.instance.init();
+  print("database loaded");
+
+  final authProvider = AuthProvider();
+  await authProvider.init();
+
   final pokemonProvider = PokemonProvider();
   pokemonProvider.fetchPokemonList();
 
   runApp(
-    ChangeNotifierProvider(
-      create: (context) => pokemonProvider,
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (context) => pokemonProvider),
+        ChangeNotifierProvider(create: (context) => authProvider),
+      ],
       child: MyApp(),
     ),
   );
 }
 
+
 class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'Pokémon App',
-      theme: ThemeData(
-        primarySwatch: Colors.red,
-      ),
-      home: HomeScreen(),
+    return Consumer<AuthProvider>(
+      builder: (context, authProvider, child) {
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          title: 'Pokémon App',
+          theme: ThemeData(
+            primarySwatch: Colors.red,
+          ),
+          initialRoute: '/',
+          routes: {
+            '/': (context) => HomeScreen(),
+            '/login': (context) => LoginScreen(),
+            '/signup': (context) => SignupScreen(),
+          },
+        );
+      },
     );
   }
 }
@@ -42,12 +68,35 @@ class HomeScreen extends StatelessWidget {
     int crossAxisCount = screenWidth > 580 ? 6 : 3;
     double maxWidth = screenWidth > 580 ? 750 : 400;
 
-    final provider = Provider.of<PokemonProvider>(context);
-    List<Map<String, dynamic>> userTeam = provider.userTeam;
+    final pokemonProvider = Provider.of<PokemonProvider>(context);
+    final authProvider = Provider.of<AuthProvider>(context);
+
+    List<Map<String, dynamic>> userTeam = pokemonProvider.userTeam;
 
     return Scaffold(
       backgroundColor: Colors.red[600],
-      body: Padding(
+      appBar: AppBar(
+        title: Text('Pokémon App', style: TextStyle(color: Colors.white, fontSize: 24)),
+        backgroundColor: Colors.red[900],
+        actions: [
+          authProvider.username == null
+              ? TextButton.icon(
+            icon: Icon(Icons.login, color: Colors.white), // Icône en blanc
+            label: Text('Connexion', style: TextStyle(color: Colors.white, fontSize: 20)),
+            onPressed: () {
+              Navigator.push(context, MaterialPageRoute(builder: (context) => LoginScreen()));
+            },
+          )
+              : TextButton.icon(
+            icon: Icon(Icons.logout, color: Colors.white), // Icône en blanc
+            label: Text('Déconnexion', style: TextStyle(color: Colors.white, fontSize: 20)),
+            onPressed: () {
+              authProvider.logout();
+            },
+          ),
+        ],
+      ),
+    body: Padding(
         padding: EdgeInsets.symmetric(vertical: screenHeight * 0.04),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.start,
@@ -64,62 +113,51 @@ class HomeScreen extends StatelessWidget {
                 ),
               ),
             ),
-            SizedBox(height: screenHeight *0.03),
+            SizedBox(height: screenHeight * 0.03),
 
-            // boutons de navigation
+            // Boutons de navigation
             HomeButton(
               text: "📖 Consulter le Pokédex",
               onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => PokemonListScreen()),
-                );
+                Navigator.push(context, MaterialPageRoute(builder: (context) => PokemonListScreen()));
               },
             ),
             HomeButton(
               text: "🎯 Composer mon équipe",
               onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => TeamBuilderScreen()),
-                );
+                Navigator.push(context, MaterialPageRoute(builder: (context) => TeamBuilderScreen()));
               },
             ),
             HomeButton(
               text: "🎲 Générer une équipe aléatoire",
               onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => RandomTeamScreen()),
-                );
+                Navigator.push(context, MaterialPageRoute(builder: (context) => RandomTeamScreen()));
               },
             ),
             HomeButton(
               text: "📁 Historique des combats",
               onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => CombatHistoryScreen()),
-                );
+                if (authProvider.username == null) {
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => LoginScreen()));
+                } else {
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => CombatHistoryScreen()));
+                }
               },
             ),
             HomeButton(
               text: "⚔️ Lancer un combat",
               onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => BattleScreen()),
-                );
+                if (authProvider.username == null) {
+                  Navigator.pushNamed(context, "/login");
+                } else {
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => BattleScreen()));
+                }
               },
             ),
-            if(userTeam.length == 6)... [
+            if (userTeam.length == 6) ...[
               Text(
                 "Mon équipe",
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
               ),
             ],
             Container(
@@ -156,6 +194,7 @@ class HomeScreen extends StatelessWidget {
     );
   }
 }
+
 // Widget bouton
 class HomeButton extends StatelessWidget {
   final String text;
