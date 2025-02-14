@@ -9,45 +9,41 @@ import 'dart:io';
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
+  static late BoxCollection _hiveCollection;
 
   DatabaseHelper._init() {
     init();
   }
 
-  // Initialisation de la base de données (SQLite ou Hive selon la plateforme)
   Future<void> init() async {
     if (kIsWeb) {
-      await Hive.initFlutter(); // Initialisation pour Web
+      await Hive.initFlutter();
+      _hiveCollection = await BoxCollection.open(
+        'pokemon_battle_db',
+        {'accounts', 'battle_history'},
+        path: '.',
+      );
     } else if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-      sqfliteFfiInit(); // Initialisation pour les plateformes de bureau
+      sqfliteFfiInit();
       databaseFactory = databaseFactoryFfi;
     }
   }
 
-  // Accéder à la base de données SQLite
   Future<Database> get database async {
     if (_database != null) return _database!;
     _database = await _initDB('pokemon_battle.db');
     return _database!;
   }
 
-  // Initialisation de la base de données SQLite
   Future<Database> _initDB(String filePath) async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
-
-    // Vérifier si la base de données existe déjà
-    final exists = await databaseFactory.databaseExists(path);
-    if (exists) {
-      print("La base de données existe déjà, ouverture...");
-      return await databaseFactory.openDatabase(path);
-    } else {
-      print("Création de la base de données...");
-      return await databaseFactory.openDatabase(path, options: OpenDatabaseOptions(version: 1, onCreate: _createDB));
-    }
+    return await databaseFactory.openDatabase(
+      path,
+      options: OpenDatabaseOptions(version: 1, onCreate: _createDB),
+    );
   }
 
-// Création des tables dans la base de données SQLite
   Future<void> _createDB(Database db, int version) async {
     await db.execute('''
       CREATE TABLE accounts (
@@ -60,7 +56,7 @@ class DatabaseHelper {
     await db.execute('''
       CREATE TABLE battle_history (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT,  -- Stocke directement le username au lieu de user_id
+        username TEXT,
         result TEXT,
         user_team TEXT,
         opponent_team TEXT,
@@ -70,60 +66,13 @@ class DatabaseHelper {
     ''');
   }
 
-  // Insérer un compte dans la base de données SQLite ou Hive
   Future<void> insertAccount(String username, String password) async {
     if (kIsWeb) {
-      var box = await Hive.openBox('accounts');
-      await box.put(username, {'username': username, 'password': password});
+      var accountsBox = await _hiveCollection.openBox('accounts');
+      await accountsBox.put(username, {'username': username, 'password': password});
     } else {
       final db = await database;
-      await db.insert('accounts', {
-        'username': username,
-        'password': password,
-      });
-    }
-  }
-
-  Future<void> insertBattle(String username, String result, String userTeam, String opponentTeam) async {
-    if (kIsWeb) {
-      var box = await Hive.openBox('battle_history');
-      await box.add({
-        'username': username,
-        'result': result,
-        'user_team': userTeam,
-        'opponent_team': opponentTeam,
-        'date': DateTime.now().toIso8601String(),
-      });
-    } else {
-      final db = await database;
-      await db.insert('battle_history', {
-        'username': username,
-        'result': result,
-        'user_team': userTeam,
-        'opponent_team': opponentTeam,
-        'date': DateTime.now().toIso8601String(),
-      });
-    }
-  }
-
-  // Méthode pour récupérer un utilisateur par son nom d'utilisateur (SQLite ou Hive)
-  Future<Map<String, dynamic>?> getUser(String username) async {
-    if (kIsWeb) {
-      var box = await Hive.openBox('accounts');
-
-      var user = box.get(username);
-      if (user != null) {
-        return Map<String, dynamic>.from(user);
-      }
-      return null;
-    } else {
-      final db = await database;
-      final result = await db.query(
-        'accounts',
-        where: 'username = ?',
-        whereArgs: [username],
-      );
-      return result.isNotEmpty ? result.first : null;
+      await db.insert('accounts', {'username': username, 'password': password});
     }
   }
 
@@ -138,43 +87,64 @@ class DatabaseHelper {
     return result.isNotEmpty ? result.first : null;
   }
 
-
-  // Récupérer l'historique des batailles avec le username
-  Future<List<Map<String, dynamic>>> getBattleHistory() async {
-    final db = await database;
-    final result = await db.rawQuery('''
-    SELECT b.*, a.username
-    FROM battle_history b
-    JOIN accounts a ON b.username = a.username
-    ''');
-    return result;
-  }
-
-
-  // Vérifier si un utilisateur existe dans la base de données
-  Future<bool> doesUserExist(String username) async {
+  Future<void> insertBattle(String username, String result, String userTeam, String opponentTeam) async {
     if (kIsWeb) {
-      var box = await Hive.openBox('accounts');
-      return box.containsKey(username);
+      var battleBox = await _hiveCollection.openBox('battle_history');
+
+      await battleBox.put(DateTime.now().toIso8601String(),{
+        'username': username,
+        'result': result,
+        'user_team': userTeam,
+        'opponent_team': opponentTeam,
+        'date': DateTime.now().toIso8601String(),
+      });
+
+      var savedBattle = await battleBox.get(DateTime.now().toIso8601String());
+
     } else {
       final db = await database;
-      final result = await db.query(
-        'accounts',
-        where: 'username = ?',
-        whereArgs: [username],
-      );
-      return result.isNotEmpty;
+      await db.insert('battle_history', {
+        'username': username,
+        'result': result,
+        'user_team': userTeam,
+        'opponent_team': opponentTeam,
+        'date': DateTime.now().toIso8601String(),
+      });
     }
   }
 
-  // Méthode pour récupérer tous les utilisateurs
-  Future<List<Map<String, dynamic>>> getAllUsers() async {
+  Future<Map<String, dynamic>?> getUser(String username) async {
     if (kIsWeb) {
-      var box = await Hive.openBox('accounts');
-      return box.values.toList().cast<Map<String, dynamic>>();
+      var accountsBox = await _hiveCollection.openBox('accounts');
+      var user = await accountsBox.get(username);
+      return user != null ? Map<String, dynamic>.from(user) : null;
     } else {
       final db = await database;
-      return await db.query('accounts');
+      final result = await db.query('accounts', where: 'username = ?', whereArgs: [username]);
+      return result.isNotEmpty ? result.first : null;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getBattleHistory() async {
+    if (kIsWeb) {
+      var battleBox = await _hiveCollection.openBox('battle_history');
+      final battleData = await battleBox.getAllValues();
+
+      return battleData.values.map((e) => Map<String, dynamic>.from(e)).toList();
+    } else {
+      final db = await database;
+      return await db.query('battle_history');
+    }
+  }
+
+  Future<bool> doesUserExist(String username) async {
+    if (kIsWeb) {
+      var accountsBox = await _hiveCollection.openBox('accounts');
+      return await accountsBox.get(username) != null;
+    } else {
+      final db = await database;
+      final result = await db.query('accounts', where: 'username = ?', whereArgs: [username]);
+      return result.isNotEmpty;
     }
   }
 }

@@ -72,10 +72,38 @@ class _BattleScreenState extends State<BattleScreen> {
       // Vérification : si les deux attaques font exactement 0 dégâts, ils se blessent tous les deux
       if (damage == 0 && enemyDamage == 0) {
         battleLog = "${attacker['name']['fr']} et ${defender['name']['fr']} se ratent tous les deux et prennent 10 dégâts chacun !";
-        attacker['hp'] -= 10;
-        defender['hp'] -= 10;
-        enemyAttacker['hp'] -= 10;
-        enemyDefender['hp'] -= 10;
+
+        attacker['hp'] = (attacker['hp'] - 10).clamp(0, attacker['stats']['hp'] * 2);
+        defender['hp'] = (defender['hp'] - 10).clamp(0, defender['stats']['hp'] * 2);
+        enemyAttacker['hp'] = (enemyAttacker['hp'] - 10).clamp(0, enemyAttacker['stats']['hp'] * 2);
+        enemyDefender['hp'] = (enemyDefender['hp'] - 10).clamp(0, enemyDefender['stats']['hp'] * 2);
+
+        // Vérification KO immédiate
+        if (attacker['hp'] <= 0) {
+          battleLog += " ${attacker['name']['fr']} est K.O !";
+          if (currentPlayerIndex < playerTeam.length - 1) {
+            currentPlayerIndex++;
+            battleLog += " ${playerTeam[currentPlayerIndex]['name']['fr']} entre en combat !";
+          } else {
+            battleLog = "Défaite... Tous vos Pokémon sont K.O !";
+            battleOver = true;
+            _saveBattleResult();
+            return;
+          }
+        }
+
+        if (enemyDefender['hp'] <= 0) {
+          battleLog += " ${enemyDefender['name']['fr']} est K.O !";
+          if (currentEnemyIndex < enemyTeam.length - 1) {
+            currentEnemyIndex++;
+            battleLog += " ${enemyTeam[currentEnemyIndex]['name']['fr']} entre en combat !";
+          } else {
+            battleLog = "Victoire ! Tous les Pokémon adverses sont K.O !";
+            battleOver = true;
+            _saveBattleResult();
+            return;
+          }
+        }
       } else {
         // Attaque du joueur
         if (damage <= 0) {
@@ -191,7 +219,7 @@ class _BattleScreenState extends State<BattleScreen> {
   void _saveBattleResult() {
     final provider = Provider.of<PokemonProvider>(context, listen: false);
     provider.saveBattleHistory(
-      battleLog.contains("Victoire") ? "Victoire" : "Défaite",
+      context,battleLog.contains("Victoire") ? "Victoire" : "Défaite",
     );
   }
 

@@ -2,7 +2,10 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
+import 'auth_providers.dart';
 import '../services/database_helper.dart';
+
 
 class PokemonProvider with ChangeNotifier {
   List<Map<String, dynamic>> _pokemonList = [];
@@ -82,28 +85,28 @@ class PokemonProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> saveBattleHistory(String result) async {
-    final db = DatabaseHelper.instance;
-    if (_currentUserId == null) return;
+  Future<void> saveBattleHistory(BuildContext context, String result) async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    String username = authProvider.username!;
 
-    final user = await db.getUserById(_currentUserId!);
-    if (user == null) return;
-
-    String username = user['username'];
-    final userTeamJson = json.encode(_userTeam);
-    final opponentTeamJson = json.encode(_randomTeam);
-    await db.insertBattle(username, result, userTeamJson, opponentTeamJson);
+    final userTeamJson = jsonEncode(_userTeam);
+    final opponentTeamJson = jsonEncode(_randomTeam);
 
     _battleHistory.add({
       'username': username,
       'result': result,
       'userTeam': _userTeam,
       'opponentTeam': _randomTeam,
-      'date': DateTime.now().toIso8601String(),
     });
-
+    await DatabaseHelper.instance.insertBattle(
+      username,
+      result,
+      userTeamJson,
+      opponentTeamJson,
+    );
     notifyListeners();
   }
+
 
   // Charger l'historique des batailles depuis la base de données
   Future<void> loadBattleHistory() async {
@@ -144,8 +147,10 @@ class PokemonProvider with ChangeNotifier {
       notifyListeners();
       return true;
     }
+    print("Login failed: user not found");
     return false;
   }
+
 
   // Déconnexion utilisateur
   void logoutUser() {

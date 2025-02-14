@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../providers/auth_providers.dart';
 import '../providers/pokemon_provider.dart';
 import '../services/database_helper.dart';
 import 'dart:convert';
@@ -20,11 +21,17 @@ class _CombatHistoryScreenState extends State<CombatHistoryScreen> {
 
   Future<void> _loadBattleHistory() async {
     final db = DatabaseHelper.instance;
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    if (authProvider.username == null) return;
+
     final history = await db.getBattleHistory();
+
     setState(() {
-      battleHistory = history;
+      battleHistory = history.where((combat) => combat['username'] == authProvider.username).toList();
     });
   }
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -82,7 +89,7 @@ class _CombatHistoryScreenState extends State<CombatHistoryScreen> {
                         textAlign: TextAlign.center,
                       ),
                       SizedBox(height: 5),
-                      _buildPokemonTeam(combat['userTeam']),
+                      _buildPokemonTeam(combat['user_team']),
                       SizedBox(height: 10),
                       Text(
                         "Équipe adverse:",
@@ -94,7 +101,7 @@ class _CombatHistoryScreenState extends State<CombatHistoryScreen> {
                         textAlign: TextAlign.center,
                       ),
                       SizedBox(height: 5),
-                      _buildPokemonTeam(combat['opponentTeam']),
+                      _buildPokemonTeam(combat['opponent_team']),
                     ],
                   ),
                 ),
